@@ -17,37 +17,44 @@ from models.layers import StructuralAttentionLayer, TemporalAttentionLayer
 from utils.utilities import fixed_unigram_candidate_sampler
 
 class DySAT(nn.Module):
-    def __init__(self, args, num_features, time_length):
+    def __init__(self, args, num_features, time_length): #初始化DySAT模型 self代表类的实例对象
         """[summary]
 
         Args:
-            args ([type]): [description]
-            time_length (int): Total timesteps in dataset.
+            args：包含模型超参数和配置的对象
+            time_length (int): 数据集中的总时间步数
+            num_features(int):输入特征的维度
         """
-        super(DySAT, self).__init__()
+        super(DySAT, self).__init__() #初始化父类
         self.args = args
-        if args.window < 0:
+        #args.window指定时间窗口的大小
+        if args.window < 0: #小于0时，使用整个时间长度
             self.num_time_steps = time_length
         else:
             self.num_time_steps = min(time_length, args.window + 1)  # window = 0 => only self.
         self.num_features = num_features
 
+        #结构注意力头和层的配置
         self.structural_head_config = list(map(int, args.structural_head_config.split(",")))
         self.structural_layer_config = list(map(int, args.structural_layer_config.split(",")))
+        #时间注意力头和层的配置
         self.temporal_head_config = list(map(int, args.temporal_head_config.split(",")))
         self.temporal_layer_config = list(map(int, args.temporal_layer_config.split(",")))
+        #时间和空间注意力的丢弃率
         self.spatial_drop = args.spatial_drop
         self.temporal_drop = args.temporal_drop
 
+        #构建空间和时间注意力模块
         self.structural_attn, self.temporal_attn = self.build_model()
 
+        #使用二元交叉熵损失函数
         self.bceloss = BCEWithLogitsLoss()
 
     def forward(self, graphs):
 
-        # Structural Attention forward
-        structural_out = []
-        for t in range(0, self.num_time_steps):
+        #结构注意力前向传播
+        structural_out = [] #初始化一个空列表 用于存储每个时间步的结构注意力输出
+        for t in range(0, self.num_time_steps): #遍历所有时间步
             structural_out.append(self.structural_attn(graphs[t]))
         structural_outputs = [g.x[:,None,:] for g in structural_out] # list of [Ni, 1, F]
 
@@ -67,9 +74,9 @@ class DySAT(nn.Module):
         return temporal_out
 
     def build_model(self):
-        input_dim = self.num_features
+        input_dim = self.num_features #input_dim初始化为输入特征的维度，即每个节点的特征数
 
-        # 1: Structural Attention Layers
+        # 1: 结构注意力层
         structural_attention_layers = nn.Sequential()
         for i in range(len(self.structural_layer_config)):
             layer = StructuralAttentionLayer(input_dim=input_dim,
