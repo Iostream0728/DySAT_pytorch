@@ -121,14 +121,14 @@ if __name__ == "__main__":
         len(train_edges_pos), len(train_edges_neg), len(val_edges_pos), len(val_edges_neg),
         len(test_edges_pos), len(test_edges_neg))) #用于输出训练集、验证集和测试集中正样本和负样本的数量
 
-    # Create the adj_train so that it includes nodes from (t+1) but only edges from t: this is for the purpose of
-    # inductive testing.
-    new_G = inductive_graph(graphs[args.time_steps-2], graphs[args.time_steps-1])
-    graphs[args.time_steps-1] = new_G
-    adjs[args.time_steps-1] = nx.adjacency_matrix(new_G)
+    # 创建adj_train,它应该包含来自时间步t+1的节点，但只保留来自时间步t的边，
+    #这是为了归纳性测试（inductive testing）
+    new_G = inductive_graph(graphs[args.time_steps-2], graphs[args.time_steps-1]) #生成新图new_G
+    graphs[args.time_steps-1] = new_G #更新时间步t+1的图为new_G
+    adjs[args.time_steps-1] = nx.adjacency_matrix(new_G) #生成new_G的邻接矩阵并更新为时间步t+1的邻接矩阵
 
-    # build dataloader and model
-    device = torch.device("cuda:0")
+    # 构建数据加载器和模型
+    device = torch.device("cuda:0") #设置gpu设备
     dataset = MyDataset(args, graphs, feats, adjs, context_pairs_train)
     dataloader = DataLoader(dataset, 
                             batch_size=args.batch_size, 
@@ -137,14 +137,16 @@ if __name__ == "__main__":
                             collate_fn=MyDataset.collate_fn)
     #dataloader = NodeMinibatchIterator(args, graphs, feats, adjs, context_pairs_train, device) 
     model = DySAT(args, feats[0].shape[1], args.time_steps).to(device)
+    #使用AdamW优化器来优化模型参数
     opt = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
     # in training
-    best_epoch_val = 0
-    patient = 0
+    #epoch表示遍历整个训练数据集一次
+    best_epoch_val = 0 #保存最佳验证集AUC值
+    patient = 0 #计数器，用于早停机制，如果模型在连续多个epoch上没有提升验证集AUC，则停止训练
     for epoch in range(args.epochs):
-        model.train()
-        epoch_loss = []
+        model.train() #模型设置为训练模式
+        epoch_loss = [] 
         for idx, feed_dict in enumerate(dataloader):
             feed_dict = to_device(feed_dict, device)
             opt.zero_grad()
@@ -153,7 +155,7 @@ if __name__ == "__main__":
             opt.step()
             epoch_loss.append(loss.item())
 
-        model.eval()
+        model.eval() #模型设置为评估模式
         emb = model(feed_dict["graphs"])[:, -2, :].detach().cpu().numpy()
         val_results, test_results, _, _ = evaluate_classifier(train_edges_pos,
                                                             train_edges_neg,
@@ -174,14 +176,15 @@ if __name__ == "__main__":
             patient += 1
             if patient > args.early_stop:
                 break
-
+        
+        #输出训练信息
         print("Epoch {:<3},  Loss = {:.3f}, Val AUC {:.3f} Test AUC {:.3f}".format(epoch, 
                                                                 np.mean(epoch_loss),
                                                                 epoch_auc_val, 
                                                                 epoch_auc_test))
-    # Test Best Model
-    model.load_state_dict(torch.load("./model_checkpoints/model.pt"))
-    model.eval()
+    # 加载最佳模型
+    model.load_state_dict(torch.load("./model_checkpoints/model.pt")) #从指定路径加载之前保存的最佳模型参数
+    model.eval() #将模型设置为评估模式
     emb = model(feed_dict["graphs"])[:, -2, :].detach().cpu().numpy()
     val_results, test_results, _, _ = evaluate_classifier(train_edges_pos,
                                                         train_edges_neg,
