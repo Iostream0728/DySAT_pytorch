@@ -51,7 +51,7 @@ class DySAT(nn.Module):
         self.bceloss = BCEWithLogitsLoss()
 
     def forward(self, graphs):
-
+        #前向传播=> 指模型从输入特征到输出节点表示的过程
         #结构注意力前向传播
         structural_out = [] #初始化一个空列表 用于存储每个时间步的结构注意力输出
         for t in range(0, self.num_time_steps): #遍历所有时间步
